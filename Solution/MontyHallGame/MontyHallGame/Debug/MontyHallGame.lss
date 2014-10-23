@@ -4439,7 +4439,7 @@ static inline void ssd1306_clear(void)
 				uint32_t switching_win_pct = (game_state.times_switched_won * 100) / game_state.times_switched;
 				uint32_t staying_win_pct = ((game_state.times_won-game_state.times_switched_won) * 100) 
 				                           / (game_state.number_of_games-game_state.times_switched);
-				sprintf( result_disp, "Games Played: %d, Games Win %d\%, Switch Win %d\% Stay Win %d\%",
+				sprintf( result_disp, "Games Played: %d, Games Win %d%%, Switch Win %d%% Stay Win %d%%",
   401352:	4e4b      	ldr	r6, [pc, #300]	; (401480 <main+0x270>)
     print_uart( "Press a button", max_disp_string, max_uart_tries );
 	
@@ -4578,7 +4578,7 @@ static inline void ssd1306_clear(void)
   4013ee:	fbbc fcf1 	udiv	ip, ip, r1
 				uint32_t staying_win_pct = ((game_state.times_won-game_state.times_switched_won) * 100) 
 				                           / (game_state.number_of_games-game_state.times_switched);
-				sprintf( result_disp, "Games Played: %d, Games Win %d\%, Switch Win %d\% Stay Win %d\%",
+				sprintf( result_disp, "Games Played: %d, Games Win %d%%, Switch Win %d%% Stay Win %d%%",
   4013f2:	f8cd c000 	str.w	ip, [sp]
 			}
 			if( game_over )
@@ -4598,7 +4598,7 @@ static inline void ssd1306_clear(void)
 				uint32_t staying_win_pct = ((game_state.times_won-game_state.times_switched_won) * 100) 
   4013fe:	fbb2 f2f1 	udiv	r2, r2, r1
 				                           / (game_state.number_of_games-game_state.times_switched);
-				sprintf( result_disp, "Games Played: %d, Games Win %d\%, Switch Win %d\% Stay Win %d\%",
+				sprintf( result_disp, "Games Played: %d, Games Win %d%%, Switch Win %d%% Stay Win %d%%",
   401402:	9201      	str	r2, [sp, #4]
   401404:	a80c      	add	r0, sp, #48	; 0x30
   401406:	4631      	mov	r1, r6
@@ -12010,15 +12010,15 @@ static inline void ssd1306_clear(void)
   405e14:	6147202c 	.word	0x6147202c
   405e18:	2073656d 	.word	0x2073656d
   405e1c:	206e6957 	.word	0x206e6957
-  405e20:	2c256425 	.word	0x2c256425
-  405e24:	69775320 	.word	0x69775320
-  405e28:	20686374 	.word	0x20686374
-  405e2c:	206e6957 	.word	0x206e6957
-  405e30:	20256425 	.word	0x20256425
-  405e34:	79617453 	.word	0x79617453
-  405e38:	6e695720 	.word	0x6e695720
-  405e3c:	25642520 	.word	0x25642520
-  405e40:	00000000 	.word	0x00000000
+  405e20:	25256425 	.word	0x25256425
+  405e24:	7753202c 	.word	0x7753202c
+  405e28:	68637469 	.word	0x68637469
+  405e2c:	6e695720 	.word	0x6e695720
+  405e30:	25642520 	.word	0x25642520
+  405e34:	74532025 	.word	0x74532025
+  405e38:	57207961 	.word	0x57207961
+  405e3c:	25206e69 	.word	0x25206e69
+  405e40:	00252564 	.word	0x00252564
   405e44:	73657250 	.word	0x73657250
   405e48:	20612073 	.word	0x20612073
   405e4c:	74747562 	.word	0x74747562

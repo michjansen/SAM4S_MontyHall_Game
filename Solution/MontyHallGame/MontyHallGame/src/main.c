@@ -489,7 +489,7 @@ int main(void)
 				uint32_t switching_win_pct = (game_state.times_switched_won * 100) / game_state.times_switched;
 				uint32_t staying_win_pct = ((game_state.times_won-game_state.times_switched_won) * 100) 
 				                           / (game_state.number_of_games-game_state.times_switched);
-				sprintf( result_disp, "Games Played: %d, Games Win %d\%, Switch Win %d\% Stay Win %d\%",
+				sprintf( result_disp, "Games Played: %d, Games Win %d%%, Switch Win %d%% Stay Win %d%%",
 				         game_state.number_of_games,
 						 win_pct,
 						 switching_win_pct,
