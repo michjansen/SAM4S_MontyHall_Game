@@ -79,6 +79,14 @@ enum DOOR_PRESSED_EVENTS
 
 volatile uint32_t g_door_pressed = DOOR_NOT_PRESSED;
 
+typedef struct 
+{
+	uint32_t col;
+	uint32_t page;
+	uint32_t width;
+	uint32_t height;
+} door_coordinates;
+
 typedef enum 
 {
 	MONTY_GAME_STARTED,
@@ -315,36 +323,32 @@ static void configure_buttons(void)
 
 }
 
-/**
- * \brief Draw graph on the OLED screen using the provided point array.
- * \param col X coordinate.
- * \param page Y coordinate (please refer to OLED datasheet for page description).
- * \param width Graph width.
- * \param height Graph height.
- * \param tab Data to draw. Must contain width elements.
- */
-static void ssd1306_draw_graph(uint8_t col, uint8_t page, uint8_t width, uint8_t height, uint8_t *tab)
+
+static void ssd1306_draw_door(door_coordinates door, uint8_t open)
 {
-	uint8_t page_start;
-	uint8_t i, j, k, s;
-	uint8_t scale;
-
-	for (i = col; i < width; ++i) {
-		for (page_start = page; page_start <= height; ++page_start) {
-			ssd1306_write_command(SSD1306_CMD_SET_PAGE_START_ADDRESS(page_start));
-			ssd1306_set_column_address(i);
-			j = tab[i];
-			scale = 8 * (height - page_start + 1);
-			if (j > scale)
-				j = 8;
-			else
-				j -= (scale - 8);
-
-			for (k = 0, s = j; j > 0; --j)
-				k = (k << 1) + 1;
-			for (s = 8 - s; s > 0; --s)
-				k <<= 1;
-			ssd1306_write_data(k);
+	uint8_t i = door.col;
+	uint8_t page_start = door.page;
+	
+	for( i = door.col; i < (door.col+door.width); ++i )
+	{
+		for (page_start = door.page; page_start <= door.height; ++page_start) 
+		{
+			if( !open || (i == door.col)           || (i == (door.col+door.width-1)) 
+			          || (page_start == door.page) || (page_start == door.height) )
+			{
+				ssd1306_set_page_address(page_start);
+				ssd1306_set_column_address(i);
+				uint8_t data = 0xff;
+				if( open && (page_start == door.page) )
+				{
+					data = 0x01;
+				}
+				if( open && (page_start == door.height) )
+				{
+					data = 0x80;
+				}
+				ssd1306_write_data(data);
+			}
 		}
 	}
 }
@@ -442,7 +446,18 @@ int main(void)
 	monty_hall_state game_state = { 0, 0, 0, 0, MONTY_GAME_STARTED,
 								DOOR_NOT_PRESSED, DOOR_NOT_PRESSED, DOOR_NOT_PRESSED };
 								
-    print_uart( "Press a button", max_disp_string, max_uart_tries );
+    print_uart( "Press a button to open a door", max_disp_string, max_uart_tries );
+	ssd1306_set_page_address(0);
+	ssd1306_set_column_address(0);
+	ssd1306_write_text("Press a button to open a door");
+	
+	door_coordinates door1_coord = { 10, 2, 10, 3 };
+	door_coordinates door2_coord = { 60, 2, 10, 3 };
+	door_coordinates door3_coord = { 110, 2, 10, 3 };
+
+	ssd1306_draw_door( door1_coord, false );
+	ssd1306_draw_door( door2_coord, true );
+	ssd1306_draw_door( door3_coord, false );
 	
 	for( ;; )
 	{
@@ -454,11 +469,14 @@ int main(void)
 			g_door_pressed = DOOR_NOT_PRESSED;
 			if( game_state.state == FIRST_DOOR_OPEN )
 			{
-				sprintf( result_disp, "Game State %d: selected door %d open door %d", 
-				         game_state.state,
-						 game_state.first_door,
-						 game_state.open_door );
-				print_uart( result_disp, max_disp_string, max_uart_tries );
+				if( result == 0 )
+				{
+					sprintf( result_disp, "Game State %d: selected door %d open door %d", 
+						     game_state.state,
+							 game_state.first_door,
+							 game_state.open_door );
+					print_uart( result_disp, max_disp_string, max_uart_tries );
+				}
 			}
 			else if( game_state.state == GAME_OVER_WON )
 			{
@@ -489,79 +507,23 @@ int main(void)
 				uint32_t switching_win_pct = (game_state.times_switched_won * 100) / game_state.times_switched;
 				uint32_t staying_win_pct = ((game_state.times_won-game_state.times_switched_won) * 100) 
 				                           / (game_state.number_of_games-game_state.times_switched);
-				sprintf( result_disp, "Games Played: %d, Games Win %d%%, Switch Win %d%% Stay Win %d%%",
+				sprintf( result_disp, "Games Played: %d, Switch Count %d, Games Win %d%%, Switch Win %d%% Stay Win %d%%",
 				         game_state.number_of_games,
+						 game_state.times_switched,
 						 win_pct,
 						 switching_win_pct,
 						 staying_win_pct );
 				print_uart( result_disp, max_disp_string, max_uart_tries );
 				print_uart( "Press a button to play again", max_disp_string, max_uart_tries );
 			}
-		}
-
-#if 0		
-		/* Refresh page title only if necessary. */
-		if (app_mode_switch > 0)
-		{
-			app_mode = (app_mode + 1) % 3;
-
+			
 			// Clear screen.
 			ssd1306_clear();
 			ssd1306_set_page_address(0);
 			ssd1306_set_column_address(0);
-
-
-			/* Temperature mode. */
-			if (app_mode == 0)
-			{
-				ioport_set_pin_level(IO1_LED1_PIN, IO1_LED1_ACTIVE);
-				ioport_set_pin_level(IO1_LED2_PIN, !IO1_LED2_ACTIVE);
-				ioport_set_pin_level(IO1_LED3_PIN, !IO1_LED3_ACTIVE);
-				ssd1306_write_text("Temperature sensor:");
-			}
-			/* Light mode. */
-			else if (app_mode == 1)
-			{
-				ioport_set_pin_level(IO1_LED2_PIN, IO1_LED2_ACTIVE);
-				ioport_set_pin_level(IO1_LED1_PIN, !IO1_LED1_ACTIVE);
-				ioport_set_pin_level(IO1_LED3_PIN, !IO1_LED3_ACTIVE);
-				ssd1306_write_text("Light sensor:");
-			}
-			/* SD mode. */
-			else
-			{
-				ioport_set_pin_level(IO1_LED3_PIN, IO1_LED3_ACTIVE);
-				ioport_set_pin_level(IO1_LED1_PIN, !IO1_LED1_ACTIVE);
-				ioport_set_pin_level(IO1_LED2_PIN, !IO1_LED2_ACTIVE);
-
-				sd_listing_pos = 0;
-				display_sd_info();
-			}
-
-			app_mode_switch = 0;
-
+			ssd1306_write_text(result_disp);
 		}
 
-		// Print temperature in text format.
-		if (app_mode == 0)
-		{
-			sprintf(value_disp, "%d", (uint8_t)temp);
-			ssd1306_set_column_address(95);
-			ssd1306_write_command(SSD1306_CMD_SET_PAGE_START_ADDRESS(0));
-			ssd1306_write_text(" ");
-			// Avoid character overlapping.
-			if (temp < 10)
-				ssd1306_clear_char();
-			ssd1306_write_text(value_disp);
-			// Display degree symbol.
-			ssd1306_write_data(0x06);
-			ssd1306_write_data(0x06);
-			ssd1306_write_text("c");
-
-			// Refresh graph.
-			ssd1306_draw_graph(0, 1, BUFFER_SIZE, 3, temperature);
-		}
-#endif
 
 		/* Wait and stop screen flickers. */
 		delay_ms(50);
