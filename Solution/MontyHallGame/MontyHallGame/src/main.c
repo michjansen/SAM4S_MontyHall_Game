@@ -536,6 +536,8 @@ int main(void)
 				print_uart( "Press a button to select a door", max_disp_string, max_uart_tries );
 				sprintf( result_disp[0], "Select a door" );
 			}
+			
+			// Game is over calculate the statistics and set up the final display
 			if( game_over )
 			{
 				uint32_t win_pct = (game_state.times_won * 100) / game_state.number_of_games;
