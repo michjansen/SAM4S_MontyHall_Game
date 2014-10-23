@@ -70,6 +70,7 @@
 #include <asf.h>
 #include <string.h>
 
+/** \brief definition of values for door selection */
 enum DOOR_PRESSED_EVENTS
 {
 	DOOR_PRESSED_MIN = 1,
@@ -77,8 +78,10 @@ enum DOOR_PRESSED_EVENTS
 	DOOR_NOT_PRESSED
 };
 
+/** \brief global variable to pass information from interrupt to main */
 volatile uint32_t g_door_pressed = DOOR_NOT_PRESSED;
 
+/** \brief structure to hold door drawing coordinates */
 typedef struct 
 {
 	uint32_t col;
@@ -87,28 +90,36 @@ typedef struct
 	uint32_t height;
 } door_coordinates;
 
+/** \brief definition of values for monty hall game state */
 typedef enum 
 {
-	MONTY_GAME_STARTED,
-	FIRST_DOOR_OPEN,
-	GAME_OVER_WON,
-	GAME_OVER_LOST
+	MONTY_GAME_STARTED, /**< Game is starting, next button press will setup the game */
+	FIRST_DOOR_OPEN,    /**< First door choice has been made, next press will end the game */
+	GAME_OVER_WON,      /**< Game is over, player won */
+	GAME_OVER_LOST      /**< Game is over, player lost */
 } MONTY_HALL_STATE;
 
+/** \brief structure for holding the current game state and historical won/loss info */
 typedef struct 
 {
-	uint32_t number_of_games;
-	uint32_t times_switched;
-	uint32_t times_switched_won;
-	uint32_t times_won;
+	uint32_t number_of_games;    /**< Total games played since reset */
+	uint32_t times_switched;     /**< Times the player switched doors */
+	uint32_t times_switched_won; /**< Times the player switching doors won */
+	uint32_t times_won;          /**< Total wins (switching or not) */
 	
-	MONTY_HALL_STATE state;
-	uint32_t first_door;
-	uint32_t open_door;
-	uint32_t winning_door;
+	MONTY_HALL_STATE state;      /**< State of the current game */
+	uint32_t first_door;         /**< First door selection */
+	uint32_t open_door;          /**< Door Monty openned */
+	uint32_t winning_door;       /**< Door with the big prize */
 	
 } monty_hall_state;
-	
+
+/** \brief Monty door picking algorithm 
+ *
+ * \param winning_door - door that has the big prize
+ * \param first_door - door the player selected first
+ * \returns The door Monty wants to open
+ */
 uint32_t pick_open_door( uint32_t winning_door, uint32_t first_door )
 {
 	uint32_t open_door = DOOR_NOT_PRESSED;
@@ -177,7 +188,13 @@ uint32_t pick_open_door( uint32_t winning_door, uint32_t first_door )
 	return open_door;
 }
 
-int32_t handle_door_press( monty_hall_state *p_game_state, uint32_t new_door_press )
+/** \brief game state machine
+ *
+ * \param p_game_state - pointer to the current game state, which will be updated
+ * \param new_door_press - the door the player selected most recently
+ * \returns 0 if everything is okay -1 for errors and player picking an open door
+ */
+int32_t handle_current_game_update( monty_hall_state *p_game_state, uint32_t new_door_press )
 {
 	if( p_game_state == NULL )
 	{
@@ -186,6 +203,7 @@ int32_t handle_door_press( monty_hall_state *p_game_state, uint32_t new_door_pre
 	
 	switch( p_game_state->state )
 	{
+		// Set up the game, store the players first door, and open the door Monty selects
 		case MONTY_GAME_STARTED:
 		{
 			p_game_state->winning_door = (rand() % 3) + 1;
@@ -194,6 +212,8 @@ int32_t handle_door_press( monty_hall_state *p_game_state, uint32_t new_door_pre
 			p_game_state->open_door = pick_open_door( p_game_state->winning_door, new_door_press );
 			break;
 		}
+		
+		// Determine if the player picked a winner
 		case FIRST_DOOR_OPEN:
 		{
 			if( p_game_state->open_door == new_door_press )
@@ -221,6 +241,8 @@ int32_t handle_door_press( monty_hall_state *p_game_state, uint32_t new_door_pre
 			p_game_state->number_of_games++;
 			break;
 		}
+		
+		// Reset the game for the next player
 		default:
 		case GAME_OVER_LOST:
 		case GAME_OVER_WON:
@@ -323,7 +345,11 @@ static void configure_buttons(void)
 
 }
 
-
+/** \brief draws a door at the specified coordinates
+ *
+ *  \param door - the coordinates to use for the door
+ *  \param open - whether door should be drawn open or closed
+ */
 static void ssd1306_draw_door(door_coordinates door, uint8_t open)
 {
 	uint8_t i = door.col;
@@ -333,6 +359,7 @@ static void ssd1306_draw_door(door_coordinates door, uint8_t open)
 	{
 		for (page_start = door.page; page_start <= door.height; ++page_start) 
 		{
+			// If this is an edge it is always drawn or if the door is closed, fill it in the door
 			uint8_t edge = (i == door.col) || (i == (door.col+door.width-1));
 			if( !open || edge || (page_start == door.page) || (page_start == door.height) )
 			{
@@ -341,10 +368,12 @@ static void ssd1306_draw_door(door_coordinates door, uint8_t open)
 				uint8_t data = 0xff;
 				if( open && !edge && (page_start == door.page) )
 				{
+					// bottom of the door
 					data = 0x01;
 				}
 				if( open && !edge && (page_start == door.height) )
 				{
+					// top of the door
 					data = 0x80;
 				}
 				ssd1306_write_data(data);
@@ -416,12 +445,15 @@ void print_uart( char * p_string, uint32_t max_len, uint32_t uart_timeout_cnt )
     }
 }
 
-
+/**
+ *  Main entry point
+ */
 int main(void)
 {
 	const uint32_t max_disp_string = 120;
     const uint32_t max_uart_tries  = 1000000;
-    char result_disp[max_disp_string];
+    char result_uart_output[max_disp_string];
+	char result_disp[max_disp_string];
 
 	// Initialize clocks.
 	sysclk_init();
@@ -456,7 +488,7 @@ int main(void)
 	door_coordinates door3_coord = { 110, 2, 10, 3 };
 
 	ssd1306_draw_door( door1_coord, false );
-	ssd1306_draw_door( door2_coord, true );
+	ssd1306_draw_door( door2_coord, false );
 	ssd1306_draw_door( door3_coord, false );
 	
 	for( ;; )
@@ -465,35 +497,35 @@ int main(void)
 		if( g_door_pressed != DOOR_NOT_PRESSED )
 		{
 			uint32_t game_over = false;
-			result = handle_door_press( &game_state, g_door_pressed );
+			result = handle_current_game_update( &game_state, g_door_pressed );
 			g_door_pressed = DOOR_NOT_PRESSED;
 			if( game_state.state == FIRST_DOOR_OPEN )
 			{
 				if( result == 0 )
 				{
-					sprintf( result_disp, "Game State %d: selected door %d open door %d", 
-						     game_state.state,
-							 game_state.first_door,
-							 game_state.open_door );
-					print_uart( result_disp, max_disp_string, max_uart_tries );
+					sprintf( result_uart_output, "Game State %d: selected door %d open door %d",
+					game_state.state,
+					game_state.first_door,
+					game_state.open_door );
+					print_uart( result_uart_output, max_disp_string, max_uart_tries );
 				}
 			}
 			else if( game_state.state == GAME_OVER_WON )
 			{
-				sprintf( result_disp, "Won: Game State %d: selected door %d open door %d", 
-				         game_state.state,
-						 game_state.first_door,
-						 game_state.open_door );
-				print_uart( result_disp, max_disp_string, max_uart_tries );
+				sprintf( result_uart_output, "Won: Game State %d: selected door %d open door %d",
+				game_state.state,
+				game_state.first_door,
+				game_state.open_door );
+				print_uart( result_uart_output, max_disp_string, max_uart_tries );
 				game_over = true;
 			}
 			else if( game_state.state == GAME_OVER_LOST )
 			{
-				sprintf( result_disp, "Lost: Game State %d: selected door %d open door %d", 
-				         game_state.state,
-						 game_state.first_door,
-						 game_state.open_door );
-				print_uart( result_disp, max_disp_string, max_uart_tries );
+				sprintf( result_uart_output, "Lost: Game State %d: selected door %d open door %d",
+				game_state.state,
+				game_state.first_door,
+				game_state.open_door );
+				print_uart( result_uart_output, max_disp_string, max_uart_tries );
 				game_over = true;
 			}
 			else if( game_state.state == MONTY_GAME_STARTED )
@@ -505,15 +537,15 @@ int main(void)
 			{
 				uint32_t win_pct = (game_state.times_won * 100) / game_state.number_of_games;
 				uint32_t switching_win_pct = (game_state.times_switched_won * 100) / game_state.times_switched;
-				uint32_t staying_win_pct = ((game_state.times_won-game_state.times_switched_won) * 100) 
-				                           / (game_state.number_of_games-game_state.times_switched);
-				sprintf( result_disp, "Games Played: %d, Switch Count %d, Games Win %d%%, Switch Win %d%% Stay Win %d%%",
-				         game_state.number_of_games,
-						 game_state.times_switched,
-						 win_pct,
-						 switching_win_pct,
-						 staying_win_pct );
-				print_uart( result_disp, max_disp_string, max_uart_tries );
+				uint32_t staying_win_pct = ((game_state.times_won-game_state.times_switched_won) * 100)
+				/ (game_state.number_of_games-game_state.times_switched);
+				sprintf( result_uart_output, "Games Played: %d, Switch Count %d, Games Win %d%%, Switch Win %d%% Stay Win %d%%",
+				game_state.number_of_games,
+				game_state.times_switched,
+				win_pct,
+				switching_win_pct,
+				staying_win_pct );
+				print_uart( result_uart_output, max_disp_string, max_uart_tries );
 				print_uart( "Press a button to play again", max_disp_string, max_uart_tries );
 				game_state.open_door = DOOR_NOT_PRESSED;
 			}
@@ -522,16 +554,15 @@ int main(void)
 			ssd1306_clear();
 			ssd1306_set_page_address(0);
 			ssd1306_set_column_address(0);
-			ssd1306_write_text(result_disp);
+			ssd1306_write_text(result_uart_output);
 
-			if( !game_over )			
+			if( !game_over )
 			{
 				ssd1306_draw_door( door1_coord, (game_state.open_door == 1) );
 				ssd1306_draw_door( door2_coord, (game_state.open_door == 2) );
 				ssd1306_draw_door( door3_coord, (game_state.open_door == 3) );
 			}
 		}
-
 
 		/* Wait and stop screen flickers. */
 		delay_ms(50);
