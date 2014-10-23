@@ -441,6 +441,9 @@ int main(void)
 
 	monty_hall_state game_state = { 0, 0, 0, 0, MONTY_GAME_STARTED,
 								DOOR_NOT_PRESSED, DOOR_NOT_PRESSED, DOOR_NOT_PRESSED };
+								
+    print_uart( "Press a button", max_disp_string, max_uart_tries );
+	
 	for( ;; )
 	{
 		int32_t result = 0;
@@ -482,11 +485,16 @@ int main(void)
 			}
 			if( game_over )
 			{
-				sprintf( result_disp, "Games Played: %d, Games Won %d, Switched %d Switched Won %d",
+				uint32_t win_pct = (game_state.times_won * 100) / game_state.number_of_games;
+				uint32_t switching_win_pct = (game_state.times_switched_won * 100) / game_state.times_switched;
+				uint32_t staying_win_pct = ((game_state.times_won-game_state.times_switched_won) * 100) 
+				                           / (game_state.number_of_games-game_state.times_switched);
+				sprintf( result_disp, "Games Played: %d, Games Win %d\%, Switch Win %d\% Stay Win %d\%",
 				         game_state.number_of_games,
-						 game_state.times_won,
-						 game_state.times_switched,
-						 game_state.times_switched_won );
+						 win_pct,
+						 switching_win_pct,
+						 staying_win_pct );
+				print_uart( result_disp, max_disp_string, max_uart_tries );
 				print_uart( "Press a button to play again", max_disp_string, max_uart_tries );
 			}
 		}
