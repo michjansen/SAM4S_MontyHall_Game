@@ -333,17 +333,17 @@ static void ssd1306_draw_door(door_coordinates door, uint8_t open)
 	{
 		for (page_start = door.page; page_start <= door.height; ++page_start) 
 		{
-			if( !open || (i == door.col)           || (i == (door.col+door.width-1)) 
-			          || (page_start == door.page) || (page_start == door.height) )
+			uint8_t edge = (i == door.col) || (i == (door.col+door.width-1));
+			if( !open || edge || (page_start == door.page) || (page_start == door.height) )
 			{
 				ssd1306_set_page_address(page_start);
 				ssd1306_set_column_address(i);
 				uint8_t data = 0xff;
-				if( open && (page_start == door.page) )
+				if( open && !edge && (page_start == door.page) )
 				{
 					data = 0x01;
 				}
-				if( open && (page_start == door.height) )
+				if( open && !edge && (page_start == door.height) )
 				{
 					data = 0x80;
 				}
@@ -515,6 +515,7 @@ int main(void)
 						 staying_win_pct );
 				print_uart( result_disp, max_disp_string, max_uart_tries );
 				print_uart( "Press a button to play again", max_disp_string, max_uart_tries );
+				game_state.open_door = DOOR_NOT_PRESSED;
 			}
 			
 			// Clear screen.
@@ -522,6 +523,13 @@ int main(void)
 			ssd1306_set_page_address(0);
 			ssd1306_set_column_address(0);
 			ssd1306_write_text(result_disp);
+
+			if( !game_over )			
+			{
+				ssd1306_draw_door( door1_coord, (game_state.open_door == 1) );
+				ssd1306_draw_door( door2_coord, (game_state.open_door == 2) );
+				ssd1306_draw_door( door3_coord, (game_state.open_door == 3) );
+			}
 		}
 
 
