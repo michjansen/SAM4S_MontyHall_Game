@@ -1,7 +1,7 @@
 /**
  * \file
  *
- * \brief Starter Kit Demo.
+ * \brief Monty Hall Game (started from Starter Kit Demo project)
  *
  * Copyright (c) 2013 Atmel Corporation. All rights reserved.
  *
@@ -42,13 +42,14 @@
  */
 
 /**
- * \mainpage Starter Kit Demo
+ * \mainpage Monty Hall Game
  *
  * \section Purpose
  *
- * The Starter Kit Demo will help new users get familiar with Atmel's
- * SAM family of microcontrollers. This demo features the IO1 and OLED1
- * extension boards for the SAM4 Xplained Pro.
+ * This project uses the Starter Kit Demo as base for a Monty Hall game as a way to get
+ * familiar the Atmel Studio environment while having some fun.
+ *
+ * This demo features the IO1 and OLED1 extension boards for the SAM4 Xplained Pro.
  *
  * \section Requirements
  *
@@ -56,12 +57,10 @@
  *
  * \section Description
  *
- * The demonstration program can operate in 3 different modes; temperature
- * information, light sensor information and SD card status.
- * The user can switch between the various mode by pressing Button1.
- * When running in mode 3 (SD card content), the user can browse the SD
- * content using Button2 (previous) and Button3 (next). Filenames are directly
- * printed on the OLED screen.
+ * The game will use the buttons on the OLED1 extension to select a door, one of the other
+ * two doors will be opened and the player can choose to switch doors.  Statistics will be
+ * maintained to show which choice is statistically better.  Theoretically switching doors
+ * has slightly better odds of winning.
  *
  * IO1 extension must be connected on EXT2.
  * OLED1 extension must be connected on EXT3.
@@ -71,16 +70,159 @@
 #include <asf.h>
 #include <string.h>
 
-/* These settings will force to set and refresh the temperature mode. */
-volatile uint32_t app_mode = 2;
-volatile uint32_t app_mode_switch = 1;
+enum DOOR_PRESSED_EVENTS
+{
+	DOOR_PRESSED_MIN = 1,
+	DOOR_PRESSED_MAX = 3,
+	DOOR_NOT_PRESSED
+};
 
-volatile uint32_t sd_update = 0;
-volatile uint32_t sd_fs_found = 0;
-volatile uint32_t sd_listing_pos = 0;
-volatile uint32_t sd_num_files = 0;
+volatile uint32_t g_door_pressed = DOOR_NOT_PRESSED;
 
-FATFS fs;
+typedef enum 
+{
+	MONTY_GAME_STARTED,
+	FIRST_DOOR_OPEN,
+	GAME_OVER_WON,
+	GAME_OVER_LOST
+} MONTY_HALL_STATE;
+
+typedef struct 
+{
+	uint32_t number_of_games;
+	uint32_t times_switched;
+	uint32_t times_switched_won;
+	uint32_t times_won;
+	
+	MONTY_HALL_STATE state;
+	uint32_t first_door;
+	uint32_t open_door;
+	uint32_t winning_door;
+	
+} monty_hall_state;
+	
+uint32_t pick_open_door( uint32_t winning_door, uint32_t first_door )
+{
+	uint32_t open_door = DOOR_NOT_PRESSED;
+	if( first_door != winning_door )
+	{
+		// Since the winning door is not the selected door,
+		//  we need simply pick the opposite unselected door
+		//  There is probably a more efficient algorithm for this,
+		//  but this will work for now.
+		if (first_door == 1)
+		{
+			if (winning_door == 2)
+			{
+				open_door = 3;
+			}
+			else
+			{
+				open_door = 2;
+			}
+		}
+		else if (first_door == 2)
+		{
+			if (winning_door == 3)
+			{
+				open_door = 1;
+			}
+			else
+			{
+				open_door = 3;
+			}
+		}
+		else if (first_door == 3)
+		{
+			if (winning_door == 1)
+			{
+				open_door = 2;
+			}
+			else
+			{
+				open_door = 1;
+			}
+		}
+	}
+	else
+	{
+		open_door = 1;
+		if( open_door == winning_door )
+		{
+			// we can't pick this door, since it is the winning one
+			open_door++;
+		}
+		
+		// Since Monty can open either door, we need to randomly select
+		//  a door.
+		int random_value = rand();
+		if( random_value & 0x1 )
+		{
+			open_door++;
+		}
+		if( open_door == winning_door )
+		{
+			// we can't pick this door, since it is the winning one
+			open_door++;
+		}
+	}
+	return open_door;
+}
+
+int32_t handle_door_press( monty_hall_state *p_game_state, uint32_t new_door_press )
+{
+	if( p_game_state == NULL )
+	{
+		return -1;
+	}
+	
+	switch( p_game_state->state )
+	{
+		case MONTY_GAME_STARTED:
+		{
+			p_game_state->winning_door = (rand() % 3) + 1;
+			p_game_state->first_door = new_door_press;
+			p_game_state->state = FIRST_DOOR_OPEN;
+			p_game_state->open_door = pick_open_door( p_game_state->winning_door, new_door_press );
+			break;
+		}
+		case FIRST_DOOR_OPEN:
+		{
+			if( p_game_state->open_door == new_door_press )
+			{
+				// Invalid button press, stay in this state and wait for another press
+				return -1;
+			}
+			if( p_game_state->winning_door == new_door_press )
+			{
+				p_game_state->state = GAME_OVER_WON;
+				p_game_state->times_won++;
+			}
+			else
+			{
+				p_game_state->state = GAME_OVER_LOST;
+			}
+			if( p_game_state->first_door != new_door_press )
+			{
+				p_game_state->times_switched++;
+				if( p_game_state->state == GAME_OVER_WON )
+				{
+					p_game_state->times_switched_won++;
+				}
+			}
+			p_game_state->number_of_games++;
+			break;
+		}
+		default:
+		case GAME_OVER_LOST:
+		case GAME_OVER_WON:
+		{
+			p_game_state->state = MONTY_GAME_STARTED;
+			break;
+		}
+	}
+	return 0;
+}
 
 /**
  * \brief Process Buttons Events.
@@ -89,35 +231,14 @@ FATFS fs;
  */
 static void ProcessButtonEvt(uint8_t uc_button)
 {
-	/* Switch between temperature, light and SD mode. */
-	if (uc_button == 1)
+	if ((uc_button >= DOOR_PRESSED_MIN) && 
+	    (uc_button <= DOOR_PRESSED_MAX))
 	{
-		app_mode_switch = 1;
+		g_door_pressed = uc_button;
 	}
-	/* Page UP button. */
-	else if ((uc_button == 2) &&
-				(app_mode == 2) &&
-				(sd_fs_found == 1) &&
-				(sd_update == 0))
+	else
 	{
-		if (sd_listing_pos > 0)
-		{
-			sd_listing_pos -= 1;
-			sd_update = 1;
-		}
-	}
-	/* Page DOWN button. */
-	else if ((uc_button == 3) &&
-				(app_mode == 2) &&
-				(sd_fs_found == 1) &&
-				(sd_update == 0))
-	{
-		/* Lock DOWN button when showing the last file. */
-		if (sd_listing_pos < sd_num_files)
-		{
-			sd_listing_pos += 1;
-			sd_update = 1;
-		}
+		g_door_pressed = DOOR_NOT_PRESSED;
 	}
 }
 
@@ -152,22 +273,6 @@ static void Button3_Handler(uint32_t id, uint32_t mask)
 {
 	if ((PIN_PUSHBUTTON_3_ID == id) && (PIN_PUSHBUTTON_3_MASK == mask))
 		ProcessButtonEvt(3);
-}
-
-/**
- * \brief Handler for SD card detect rising edge interrupt.
- * \param id The button ID.
- * \param mask The button mask.
- */
-static void SD_Detect_Handler(uint32_t id, uint32_t mask)
-{
-	if ((SD_MMC_0_CD_ID == id) && (SD_MMC_0_CD_MASK == mask))
-	{
-		sd_listing_pos = 0;
-		sd_num_files = 0;
-		sd_fs_found = 0;
-		sd_update = 1;
-	}
 }
 
 /* IRQ priority for PIO (The lower the value, the greater the priority) */
@@ -208,224 +313,6 @@ static void configure_buttons(void)
 	pio_handler_set_priority(PIN_PUSHBUTTON_3_PIO, (IRQn_Type) PIN_PUSHBUTTON_3_ID, IRQ_PRIOR_PIO);
 	pio_enable_interrupt(PIN_PUSHBUTTON_3_PIO, PIN_PUSHBUTTON_3_MASK);
 
-	/* Configure SD card detection. */
-	pmc_enable_periph_clk(SD_MMC_0_CD_ID);
-	pio_set_debounce_filter(SD_MMC_0_CD_PIO, SD_MMC_0_CD_MASK, 10);
-	pio_handler_set(SD_MMC_0_CD_PIO, SD_MMC_0_CD_ID, SD_MMC_0_CD_MASK,
-			SD_MMC_0_CD_ATTR, SD_Detect_Handler);
-	NVIC_EnableIRQ((IRQn_Type) SD_MMC_0_CD_ID);
-	pio_handler_set_priority(SD_MMC_0_CD_PIO, (IRQn_Type) SD_MMC_0_CD_ID, IRQ_PRIOR_PIO);
-	pio_enable_interrupt(SD_MMC_0_CD_PIO, SD_MMC_0_CD_MASK);
-}
-
-/**
- * \brief Configure the ADC for the light sensor.
- */
-static void configure_adc(void)
-{
-	/* Configure ADC pin for light sensor. */
-	gpio_configure_pin(LIGHT_SENSOR_GPIO, LIGHT_SENSOR_FLAGS);
-
-	/* Enable ADC clock. */
-	pmc_enable_periph_clk(ID_ADC);
-
-	/* Configure ADC. */
-	adc_init(ADC, sysclk_get_cpu_hz(), 1000000, ADC_MR_STARTUP_SUT0);
-	adc_enable_channel(ADC, ADC_CHANNEL_4);
-	adc_configure_trigger(ADC, ADC_TRIG_SW, 1);
-}
-
-/**
- * \brief Get the number of files at the root of the SD card.
- * Result is stored in global sd_num_files.
- */
-static void get_num_files_on_sd(void)
-{
-	FRESULT res;
-	FILINFO fno;
-	DIR dir;
-	char *pc_fn;
-	const char *path = "0:";
-#if _USE_LFN
-	char c_lfn[_MAX_LFN + 1];
-	fno.lfname = c_lfn;
-	fno.lfsize = sizeof(c_lfn);
-#endif
-
-	sd_num_files = 0;
-
-	/* Open the directory */
-	res = f_opendir(&dir, path);
-	if (res == FR_OK)
-	{
-		for (;;)
-		{
-			res = f_readdir(&dir, &fno);
-			if (res != FR_OK || fno.fname[0] == 0)
-			{
-				break;
-			}
-
-#if _USE_LFN
-			pc_fn = *fno.lfname ? fno.lfname : fno.fname;
-#else
-			pc_fn = fno.fname;
-#endif
-			if (*pc_fn == '.')
-			{
-				continue;
-			}
-
-			sd_num_files += 1;
-		}
-	}
-}
-
-/**
- * \brief Show SD card status on the OLED screen.
- */
-static void display_sd_info(void)
-{
-	FRESULT res;
-	uint8_t card_check;
-	uint8_t sd_card_type;
-	uint32_t sd_card_size;
-	char size[64];
-
-	// Is SD card present?
-	if (gpio_pin_is_low(SD_MMC_0_CD_GPIO) == false)
-	{
-		ssd1306_write_text("Please insert SD card...");
-	}
-	else
-	{
-		ssd1306_write_text("SD card information:");
-
-		sd_mmc_init();
-		card_check = sd_mmc_check(0);
-		while (card_check != SD_MMC_OK)
-		{
-			card_check = sd_mmc_check(0);
-			delay_ms(1);
-		}
-
-		if (card_check == SD_MMC_OK)
-		{
-			sd_card_type = sd_mmc_get_type(0);
-			sd_card_size = sd_mmc_get_capacity(0);
-
-			ssd1306_set_page_address(1);
-			ssd1306_set_column_address(0);
-
-			// Card type
-			switch(sd_card_type)
-			{
-				case CARD_TYPE_SD:
-				ssd1306_write_text("- Type: Normal SD card");
-				break;
-				case CARD_TYPE_SDIO:
-				ssd1306_write_text("- Type: SDIO card");
-				break;
-				case CARD_TYPE_HC:
-				ssd1306_write_text("- Type: High Capacity card");
-				break;
-				case CARD_TYPE_SD_COMBO:
-				ssd1306_write_text("- Type: SDIO/Memory card");
-				break;
-				default:
-				ssd1306_write_text("- Type: unknown");
-			}
-
-			ssd1306_set_page_address(2);
-			ssd1306_set_column_address(0);
-
-			sprintf(size, "- Total size: %lu KB", sd_card_size);
-			ssd1306_write_text(size);
-
-			ssd1306_set_page_address(3);
-			ssd1306_set_column_address(0);
-
-			// Try to mount file system.
-			memset(&fs, 0, sizeof(FATFS));
-			res = f_mount(LUN_ID_SD_MMC_0_MEM, &fs);
-			if (FR_INVALID_DRIVE == res)
-			{
-				ssd1306_write_text("   <No FAT FS found on SD>");
-				sd_fs_found = 0;
-			}
-			else
-			{
-				get_num_files_on_sd();
-				if (sd_num_files == 0)
-				{
-					ssd1306_write_text("         <no content>");
-					sd_fs_found = 1;
-				}
-				else
-				{
-					ssd1306_write_text("  <Press B2-3 to browse SD>");
-					sd_fs_found = 1;
-				}
-			}
-		}
-	}
-}
-
-/**
- * \brief Show SD card content on the OLED screen.
- * \note Does not browse sub folders.
- */
-static void display_sd_files(void)
-{
-	FRESULT res;
-	FILINFO fno;
-	DIR dir;
-	uint32_t line;
-	uint32_t pos;
-	char *pc_fn;
-	const char *path = "0:";
-#if _USE_LFN
-	char c_lfn[_MAX_LFN + 1];
-	fno.lfname = c_lfn;
-	fno.lfsize = sizeof(c_lfn);
-#endif
-
-	line = 0;
-	pos = 1;
-
-	/* Open the directory */
-	res = f_opendir(&dir, path);
-	if (res == FR_OK)
-	{
-		for (;;)
-		{
-			res = f_readdir(&dir, &fno);
-			if (res != FR_OK || fno.fname[0] == 0)
-			{
-				break;
-			}
-
-#if _USE_LFN
-			pc_fn = *fno.lfname ? fno.lfname : fno.fname;
-#else
-			pc_fn = fno.fname;
-#endif
-			if (*pc_fn == '.')
-			{
-				continue;
-			}
-
-			if ((pos >= sd_listing_pos) && (line < 4))
-			{
-				ssd1306_set_page_address(line++);
-				ssd1306_set_column_address(0);
-				ssd1306_write_text("/");
-				ssd1306_write_text(pc_fn);
-			}
-
-			pos += 1;
-		}
-	}
 }
 
 /**
@@ -476,26 +363,66 @@ static void ssd1306_clear_char(void)
 	ssd1306_write_data(0x00);
 }
 
-#define BUFFER_SIZE 128
+/**
+ * \brief Initializes the UART for transmitting characters
+ */
+sam4s_console_uart_init()
+{
+    const sam_uart_opt_t uart_console_settings = {
+        sysclk_get_cpu_hz(),
+        9600,
+        UART_MR_PAR_NO
+    };
+
+    uart_init(UART1,&uart_console_settings);
+    uart_enable_tx(UART1);                 
+    uart_enable(UART1);
+}
+
+/**
+ * \brief Transmits a line characters through console UART (appends a line feed to the end)
+ * Waits until all characters have been sent before returning (i.e. not buffered), ideally the
+ * timeout would be implement in actual time and be based on the BAUD rate that the UART has
+ * been configured.  However, this is sufficient for now and ensures the board won't hang forever.
+ *
+ * \param p_string - buffer of characters to transmit
+ * \param max_len - maximum number of characters that may be in the buffer
+ * \param uart_timeout_cnt - number of times to try to write to the UART before timing out
+ */
+void print_uart( char * p_string, uint32_t max_len, uint32_t uart_timeout_cnt )
+{
+    uint32_t len = strnlen(p_string, max_len);
+    for( uint32_t i = 0; i < len; i++ )
+    {
+        for( uint32_t count = 0; count < uart_timeout_cnt; count++ )
+        {
+            if( uart_write(UART1, p_string[i]) == 0 )
+            {
+                break;
+            }
+        }
+    }
+    for( uint32_t count = 0; count < uart_timeout_cnt; count++ )
+    {
+        if( uart_write(UART1, '\n') == 0 )
+        {
+            break;
+        }
+    }
+}
+
 
 int main(void)
 {
-	uint8_t i;
-	uint8_t temperature[BUFFER_SIZE];
-	uint8_t light[BUFFER_SIZE];
-	char value_disp[5];
-	uint32_t adc_value;
-	uint32_t light_value;
-	double temp;
+	const uint32_t max_disp_string = 120;
+    const uint32_t max_uart_tries  = 1000000;
+    char result_disp[max_disp_string];
 
 	// Initialize clocks.
 	sysclk_init();
 
 	// Initialize GPIO states.
 	board_init();
-
-	// Configure ADC for light sensor.
-	configure_adc();
 
 	// Initialize at30tse.
 	at30tse_init();
@@ -507,15 +434,43 @@ int main(void)
 	ssd1306_init();
 	ssd1306_clear();
 
-	// Clear internal buffers.
-	for (i = 0; i < BUFFER_SIZE; ++i)
-	{
-		temperature[i] = 0;
-		light[i] = 0;
-	}
 
-	while (true)
+	monty_hall_state game_state = { 0, 0, 0, 0, MONTY_GAME_STARTED,
+								DOOR_NOT_PRESSED, DOOR_NOT_PRESSED, DOOR_NOT_PRESSED };
+	for( ;; )
 	{
+		int32_t result = 0;
+		if( g_door_pressed != DOOR_NOT_PRESSED )
+		{
+			result = handle_door_press( &game_state, g_door_pressed );
+			g_door_pressed = DOOR_NOT_PRESSED;
+			if( game_state.state == FIRST_DOOR_OPEN )
+			{
+				sprintf( result_disp, "Game State %d: selected door %d open door %d", 
+				         game_state.state,
+						 game_state.first_door,
+						 game_state.open_door );
+				print_uart( result_disp, max_disp_string, max_uart_tries );
+			}
+			else if( game_state.state == GAME_OVER_WON )
+			{
+				sprintf( result_disp, "Won: Game State %d: selected door %d open door %d", 
+				         game_state.state,
+						 game_state.first_door,
+						 game_state.open_door );
+				print_uart( result_disp, max_disp_string, max_uart_tries );
+			}
+			else if( game_state.state == GAME_OVER_LOST )
+			{
+				sprintf( result_disp, "Lost: Game State %d: selected door %d open door %d", 
+				         game_state.state,
+						 game_state.first_door,
+						 game_state.open_door );
+				print_uart( result_disp, max_disp_string, max_uart_tries );
+			}
+		}
+
+#if 0		
 		/* Refresh page title only if necessary. */
 		if (app_mode_switch > 0)
 		{
@@ -525,6 +480,7 @@ int main(void)
 			ssd1306_clear();
 			ssd1306_set_page_address(0);
 			ssd1306_set_column_address(0);
+
 
 			/* Temperature mode. */
 			if (app_mode == 0)
@@ -554,40 +510,8 @@ int main(void)
 			}
 
 			app_mode_switch = 0;
-		}
 
-		// Shift graph buffers.
-		for (i = 0; i < BUFFER_SIZE - 1; ++i)
-		{
-			temperature[i] = temperature[i + 1];
-			light[i] = light[i + 1];
 		}
-
-		// Get temperature in a range from 0 to 40 degrees.
-		if (at30tse_read_temperature(&temp) == TWI_SUCCESS)
-		{
-			// Don't care about negative temperature.
-			if (temp < 0)
-				temp = 0;
-
-			// Update temperature for display.
-			// Note: -12 in order to rescale for better rendering.
-			if (temp < 12)
-				temperature[BUFFER_SIZE - 1] = 0;
-			else
-				temperature[BUFFER_SIZE - 1] = temp - 12;
-		}
-		else
-		{
-			// Error print zero values.
-			temperature[BUFFER_SIZE - 1] = 0;
-		}
-
-		// Get light sensor information.
-		// Rescale for better rendering.
-		adc_start(ADC);
-		adc_value = adc_get_channel_value(ADC, ADC_CHANNEL_4);
-		light[BUFFER_SIZE - 1] = 24 - adc_value * 24 / 4096;
 
 		// Print temperature in text format.
 		if (app_mode == 0)
@@ -608,50 +532,7 @@ int main(void)
 			// Refresh graph.
 			ssd1306_draw_graph(0, 1, BUFFER_SIZE, 3, temperature);
 		}
-		else if (app_mode == 1)
-		{
-			light_value = 100 - (adc_value * 100 / 4096);
-			sprintf(value_disp, "%lu", light_value);
-			ssd1306_set_column_address(98);
-			ssd1306_write_command(SSD1306_CMD_SET_PAGE_START_ADDRESS(0));
-			ssd1306_write_text(" ");
-			// Avoid character overlapping.
-			if (light_value < 10)
-				ssd1306_clear_char();
-			ssd1306_write_text(value_disp);
-			ssd1306_write_text("%");
-			// Avoid character overlapping.
-			if (light_value < 100)
-				ssd1306_clear_char();
-
-			// Refresh graph.
-			ssd1306_draw_graph(0, 1, BUFFER_SIZE, 3, light);
-		}
-		else
-		{
-			// Refresh screen if card was inserted/removed or browsing content.
-			if (sd_update == 1)
-			{
-				// Clear screen.
-				ssd1306_clear();
-				ssd1306_set_page_address(0);
-				ssd1306_set_column_address(0);
-
-				if (sd_listing_pos == 0)
-				{
-					// Show SD card info.
-					display_sd_info();
-				}
-				else
-				{
-					// List SD card files.
-					display_sd_files();
-				}
-
-				sd_update = 0;
-			}
-
-		}
+#endif
 
 		/* Wait and stop screen flickers. */
 		delay_ms(50);
