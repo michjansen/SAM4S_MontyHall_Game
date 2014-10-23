@@ -368,6 +368,7 @@ static void ssd1306_clear_char(void)
  */
 sam4s_console_uart_init()
 {
+	pmc_enable_periph_clk(ID_UART1);
     const sam_uart_opt_t uart_console_settings = {
         sysclk_get_cpu_hz(),
         9600,
@@ -430,6 +431,9 @@ int main(void)
 	// Configure IO1 buttons.
 	configure_buttons();
 
+	// Start the UART
+	sam4s_console_uart_init();
+	
 	// Initialize SPI and SSD1306 controller.
 	ssd1306_init();
 	ssd1306_clear();
@@ -442,6 +446,7 @@ int main(void)
 		int32_t result = 0;
 		if( g_door_pressed != DOOR_NOT_PRESSED )
 		{
+			uint32_t game_over = false;
 			result = handle_door_press( &game_state, g_door_pressed );
 			g_door_pressed = DOOR_NOT_PRESSED;
 			if( game_state.state == FIRST_DOOR_OPEN )
@@ -459,6 +464,7 @@ int main(void)
 						 game_state.first_door,
 						 game_state.open_door );
 				print_uart( result_disp, max_disp_string, max_uart_tries );
+				game_over = true;
 			}
 			else if( game_state.state == GAME_OVER_LOST )
 			{
@@ -467,6 +473,21 @@ int main(void)
 						 game_state.first_door,
 						 game_state.open_door );
 				print_uart( result_disp, max_disp_string, max_uart_tries );
+				game_over = true;
+			}
+			else if( game_state.state == MONTY_GAME_STARTED )
+			{
+				print_uart( "Press a button to select a door", max_disp_string, max_uart_tries );
+
+			}
+			if( game_over )
+			{
+				sprintf( result_disp, "Games Played: %d, Games Won %d, Switched %d Switched Won %d",
+				         game_state.number_of_games,
+						 game_state.times_won,
+						 game_state.times_switched,
+						 game_state.times_switched_won );
+				print_uart( "Press a button to play again", max_disp_string, max_uart_tries );
 			}
 		}
 
