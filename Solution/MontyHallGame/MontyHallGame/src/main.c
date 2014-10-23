@@ -453,7 +453,7 @@ int main(void)
 	const uint32_t max_disp_string = 120;
     const uint32_t max_uart_tries  = 1000000;
     char result_uart_output[max_disp_string];
-	char result_disp[max_disp_string];
+	char result_disp[4][max_disp_string];
 
 	// Initialize clocks.
 	sysclk_init();
@@ -478,10 +478,10 @@ int main(void)
 	monty_hall_state game_state = { 0, 0, 0, 0, MONTY_GAME_STARTED,
 								DOOR_NOT_PRESSED, DOOR_NOT_PRESSED, DOOR_NOT_PRESSED };
 								
-    print_uart( "Press a button to open a door", max_disp_string, max_uart_tries );
+    print_uart( "Press a button to select a door", max_disp_string, max_uart_tries );
 	ssd1306_set_page_address(0);
 	ssd1306_set_column_address(0);
-	ssd1306_write_text("Press a button to open a door");
+	ssd1306_write_text("Select a door");
 	
 	door_coordinates door1_coord = { 10, 2, 10, 3 };
 	door_coordinates door2_coord = { 60, 2, 10, 3 };
@@ -509,6 +509,7 @@ int main(void)
 					game_state.open_door );
 					print_uart( result_uart_output, max_disp_string, max_uart_tries );
 				}
+				sprintf( result_disp[0], "Select a door (last %d)", game_state.first_door );
 			}
 			else if( game_state.state == GAME_OVER_WON )
 			{
@@ -518,6 +519,7 @@ int main(void)
 				game_state.open_door );
 				print_uart( result_uart_output, max_disp_string, max_uart_tries );
 				game_over = true;
+				sprintf( result_disp[0], "Winner" );
 			}
 			else if( game_state.state == GAME_OVER_LOST )
 			{
@@ -527,11 +529,12 @@ int main(void)
 				game_state.open_door );
 				print_uart( result_uart_output, max_disp_string, max_uart_tries );
 				game_over = true;
+				sprintf( result_disp[0], "Loser" );
 			}
 			else if( game_state.state == MONTY_GAME_STARTED )
 			{
 				print_uart( "Press a button to select a door", max_disp_string, max_uart_tries );
-
+				sprintf( result_disp[0], "Select a door" );
 			}
 			if( game_over )
 			{
@@ -548,19 +551,31 @@ int main(void)
 				print_uart( result_uart_output, max_disp_string, max_uart_tries );
 				print_uart( "Press a button to play again", max_disp_string, max_uart_tries );
 				game_state.open_door = DOOR_NOT_PRESSED;
+				sprintf( result_disp[1], "Game win %%   %d", win_pct );
+				sprintf( result_disp[2], "Switch win %% %d", switching_win_pct );				
+				sprintf( result_disp[3], "Stay win %%   %d", staying_win_pct );
 			}
 			
 			// Clear screen.
 			ssd1306_clear();
 			ssd1306_set_page_address(0);
 			ssd1306_set_column_address(0);
-			ssd1306_write_text(result_uart_output);
+			ssd1306_write_text(result_disp[0]);
 
 			if( !game_over )
 			{
 				ssd1306_draw_door( door1_coord, (game_state.open_door == 1) );
 				ssd1306_draw_door( door2_coord, (game_state.open_door == 2) );
 				ssd1306_draw_door( door3_coord, (game_state.open_door == 3) );
+			}
+			else
+			{
+				for( uint8_t row = 1; row < 4; ++row )
+				{
+					ssd1306_set_page_address(row);
+					ssd1306_set_column_address(0);
+					ssd1306_write_text(result_disp[row]);
+				}
 			}
 		}
 
